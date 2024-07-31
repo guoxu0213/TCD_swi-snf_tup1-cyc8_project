@@ -1,0 +1,7 @@
+library(readxl)
+library(dplyr)
+x <- read_excel("E:/Msc project SWI-SNI/chromosome localization/Co-regulated_genes_filtered_by_RNA-seq.xlsx")
+y <- read.csv("E:/Msc project SWI-SNI/RNA-seq/Rna-seq_re-analysis_with_annotation-for Xuyuan-20-May 24.csv")
+coregulated_genes_filtered_by_RNA_seq_with_annotation <- left_join(x, y, by = "systematic.name")
+setwd("E:/Msc project SWI-SNI")
+write.table(coregulated_genes_filtered_by_RNA_seq_with_annotation, file = "co-regulated_genes_filtered_by_RNA-seq_with_annotation.csv", append = FALSE, quote = TRUE, sep = ",", na = "NA", dec = ".", row.names = FALSE,col.names = TRUE)
