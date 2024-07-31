@@ -1,0 +1,87 @@
+##系统报错改为英文
+Sys.setenv(LANGUAGE = "en")
+##禁止转化为因子
+options(stringsAsFactors = FALSE)
+##清空环境
+rm(list=ls())
+
+library(readxl)
+library(dplyr)
+
+# Load data
+nucleosome_data <- read_excel('E:/Msc project SWI-SNI/yeast nucleosome/S.cerevisiae nucleosome.xlsx')
+rna_seq_data <- read.csv('E:/Msc project SWI-SNI/RNA-seq/Rna-seq_re-analysis_with_annotation-for Xuyuan-20-May 24.csv')
+
+# Prepare data
+rna_seq_data$start <- as.integer(gsub(",", "", rna_seq_data$start))
+rna_seq_data$end <- as.integer(gsub(",", "", rna_seq_data$end))
+
+# Ensure consistent formatting
+rna_seq_data$chromosome <- gsub("^chr", "Chr", rna_seq_data$chromosome)
+
+# Initialize bin counts and statistics
+bins <- data.frame(
+  chromosome = character(),
+  bin = integer(),
+  gene_count = integer(),
+  mean_wt_vs_cyc8_log2FC = numeric(),
+  std_wt_vs_cyc8_log2FC = numeric(),
+  mean_wt_vs_snf2_log2FC = numeric(),
+  std_wt_vs_snf2_log2FC = numeric(),
+  gene_list = I(list())
+)
+
+# Process each chromosome
+for (i in 1:nrow(nucleosome_data)) {
+  chrom <- nucleosome_data$chromosome[i]
+  chrom_length <- nucleosome_data$ChromEnd[i]
+  bin_size <- chrom_length %/% 10
+  
+  # Initialize bin statistics for this chromosome
+  chrom_bins <- data.frame(
+    bin = 1:10,
+    gene_count = rep(0, 10),
+    wt_vs_cyc8_log2FC = I(list(rep(NA, 10))),
+    wt_vs_snf2_log2FC = I(list(rep(NA, 10))),
+    gene_list = I(list(rep(list(), 10)))
+  )
+  
+  # Assign genes to bins
+  rna_seq_chrom <- filter(rna_seq_data, chromosome == chrom)
+  
+  if (nrow(rna_seq_chrom) > 0) {
+    for (j in 1:nrow(rna_seq_chrom)) {
+      start_pos <- rna_seq_chrom$start[j]
+      if (!is.na(start_pos)) {
+        bin_index <- (start_pos %/% bin_size) + 1
+        if (bin_index > 10) {
+          bin_index <- 10  # Ensure genes at the very end fall into the last bin
+        }
+        chrom_bins$gene_count[bin_index] <- chrom_bins$gene_count[bin_index] + 1
+        chrom_bins$wt_vs_cyc8_log2FC[[bin_index]] <- c(chrom_bins$wt_vs_cyc8_log2FC[[bin_index]], as.numeric(rna_seq_chrom$`wt vs cyc8 log2FoldChange`[j]))
+        chrom_bins$wt_vs_snf2_log2FC[[bin_index]] <- c(chrom_bins$wt_vs_snf2_log2FC[[bin_index]], as.numeric(rna_seq_chrom$`wt vs snf2 log2FoldChange`[j]))
+        chrom_bins$gene_list[[bin_index]] <- c(chrom_bins$gene_list[[bin_index]], rna_seq_chrom$`systematic name`[j])
+      }
+    }
+  }
+  
+  # Calculate summary statistics for each bin
+  for (bin_index in 1:10) {
+    bins <- rbind(bins, data.frame(
+      chromosome = chrom,
+      bin = bin_index,
+      gene_count = chrom_bins$gene_count[bin_index],
+      mean_wt_vs_cyc8_log2FC = mean(chrom_bins$wt_vs_cyc8_log2FC[[bin_index]], na.rm = TRUE),
+      std_wt_vs_cyc8_log2FC = sd(chrom_bins$wt_vs_cyc8_log2FC[[bin_index]], na.rm = TRUE),
+      mean_wt_vs_snf2_log2FC = mean(chrom_bins$wt_vs_snf2_log2FC[[bin_index]], na.rm = TRUE),
+      std_wt_vs_snf2_log2FC = sd(chrom_bins$wt_vs_snf2_log2FC[[bin_index]], na.rm = TRUE),
+      gene_list = I(list(chrom_bins$gene_list[[bin_index]]))
+    ))
+  }
+}
+
+# Display the dataframe
+print(bins)
+
+# Save the results to a CSV file
+write.csv(bins, 'gene_expression_by_bin.csv', row.names = FALSE)
