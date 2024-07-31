@@ -1,0 +1,69 @@
+Sys.setenv(LANGUAGE = "en")
+options(stringsAsFactors = FALSE)
+rm(list=ls())
+
+library(readxl)
+library(dplyr)
+library(ggplot2)
+
+# Load data
+nucleosome_data <- read_excel('E:/Msc project SWI-SNI/yeast nucleosome/S.cerevisiae nucleosome.xlsx')
+rna_seq_data <- read.csv('E:/Msc project SWI-SNI/RNA-seq/Rna-seq_re-analysis_with_annotation-for Xuyuan-20-May 24.csv')
+
+# Prepare data
+rna_seq_data$start <- as.integer(gsub(",", "", rna_seq_data$start))
+rna_seq_data$end <- as.integer(gsub(",", "", rna_seq_data$end))
+
+# Ensure consistent formatting
+rna_seq_data$chromosome <- gsub("^chr", "Chr", rna_seq_data$chromosome)
+
+# Initialize bin counts
+bins <- data.frame(
+  chromosome = character(),
+  bin = integer(),
+  gene_count = integer()
+)
+
+# Process each chromosome
+for (i in 1:nrow(nucleosome_data)) {
+  chrom <- nucleosome_data$chromosome[i]
+  chrom_length <- nucleosome_data$ChromEnd[i]
+  bin_size <- chrom_length %/% 10
+  
+  # Initialize bin counts for this chromosome
+  chrom_bins <- rep(0, 10)
+  
+  # Assign genes to bins
+  rna_seq_chrom <- filter(rna_seq_data, chromosome == chrom)
+  
+  if (nrow(rna_seq_chrom) > 0) {
+    for (j in 1:nrow(rna_seq_chrom)) {
+      start_pos <- rna_seq_chrom$start[j]
+      if (!is.na(start_pos)) {
+        bin_index <- (start_pos %/% bin_size) + 1
+        if (bin_index > 10) {
+          bin_index <- 10  # Ensure genes at the very end fall into the last bin
+        }
+        chrom_bins[bin_index] <- chrom_bins[bin_index] + 1
+      }
+    }
+  }
+  
+  # Append bin data to the dataframe
+  bins <- rbind(bins, data.frame(
+    chromosome = chrom,
+    bin = 1:10,
+    gene_count = chrom_bins
+  ))
+}
+
+# Plot the distribution of genes across bins
+ggplot(bins, aes(x = bin, y = gene_count, fill = chromosome)) +
+  geom_bar(stat = "identity") +
+  facet_wrap(~ chromosome, scales = "free_y") +
+  labs(
+    title = "Gene Distribution Across Chromosome Bins",
+    x = "Bin",
+    y = "Gene Count"
+  ) +
+  theme_minimal()
